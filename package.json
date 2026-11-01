@@ -1,0 +1,22 @@
+{
+  "name": "@local/dsh-context-rotate",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Rotate an agent's context window: truncate the model-visible surface and re-seed it from a deterministic handoff brief.",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": ["index.js", "client.js", "cordis.patch.yml", "locale/*.json", "icon.svg"],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": ["@deepseek-ai/dsh-client-ui-settings"]
+    }
+  }
+}

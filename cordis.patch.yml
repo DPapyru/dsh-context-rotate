@@ -1,0 +1,4 @@
+- insert:
+    - id: context-rotate
+      name: '@local/dsh-context-rotate'
+      config: {}
