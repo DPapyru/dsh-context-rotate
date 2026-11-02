@@ -52,10 +52,44 @@ const states = new Map()
 function stateOf(session) {
   let state = states.get(session.id)
   if (!state) {
-    state = { c0: undefined, instructions: [], plan: '', todos: '', rotations: 0 }
+    state = { c0: undefined, instructions: [], plan: '', todos: '', rotations: 0, hydratedThrough: undefined }
     states.set(session.id, state)
+    hydrate(session, state)
   }
   return state
+}
+
+/** Replay a session's durable log once, so a restart cannot lose the brief's sources. */
+function hydrate(session, state) {
+  try {
+    for (const event of session.snapshotEvents()) {
+      state.hydratedThrough = event.seq
+      if (event.type === 'user/message' && event.data?.source?.kind === 'context-rotate') state.rotations += 1
+      else capture(state, session, event)
+    }
+  } catch (error) {
+    log(`hydrate error ${error?.message}`)
+  }
+}
+
+/** Record one event's contribution to the brief. */
+function capture(state, session, event) {
+  const data = event.data
+  if (event.type === 'user/message') {
+    const text = textOf(data)
+    const kind = data?.source?.kind
+    const firstOfChild = data?.source !== undefined && state.instructions.length === 0
+    if (text && (kind === 'user' || (session.header?.origin === 'subagent' && firstOfChild))) {
+      state.instructions.push(text)
+    }
+  } else if (event.type === 'tool/call') {
+    if (data?.name === 'exit_plan_mode') {
+      const args = JSON.parse(data.arguments || '{}')
+      if (typeof args.plan === 'string' && args.plan) state.plan = args.plan
+    } else if (data?.name === 'todo_write') {
+      state.todos = data.arguments || ''
+    }
+  }
 }
 
 function git(cwd, args) {
@@ -111,17 +145,10 @@ function replaceRange(session) {
 export function apply(ctx, config) {
   log('apply')
 
-  // This plugin ships its own settings page, so suppress any auto-generated form.
-  const settings = ctx.get('settings')
-  settings?.configure?.({ auto: false }, ctx.fiber)
-  setTimeout(() => {
-    try {
-      const served = (settings?.describe?.({}) ?? []).some((row) => row.ns === 'context-rotate')
-      if (!served) log('WARN settings namespace missing; the settings page will stay empty')
-    } catch (error) {
-      log(`settings describe error ${error?.message}`)
-    }
-  }, 2000)
+  // Ships its own settings page; the service is not up during apply, so register once injected.
+  ctx.inject(['settings'], (scoped) =>
+    scoped.settings.configure({ auto: false }, scoped.fiber),
+  )
 
   ctx.on('session/created', (session) => {
     const state = stateOf(session)
@@ -134,21 +161,9 @@ export function apply(ctx, config) {
   ctx.on('session/event', (session, event) => {
     try {
       const state = stateOf(session)
-      if (event.type === 'user/message') {
-        const text = textOf(event)
-        const kind = event.source?.kind
-        const firstOfChild = event.source !== undefined && state.instructions.length === 0
-        if (text && (kind === 'user' || (session.header?.origin === 'subagent' && firstOfChild))) {
-          state.instructions.push(text)
-        }
-      } else if (event.type === 'tool/call') {
-        if (event.name === 'exit_plan_mode') {
-          const args = JSON.parse(event.arguments || '{}')
-          if (typeof args.plan === 'string' && args.plan) state.plan = args.plan
-        } else if (event.name === 'todo_write') {
-          state.todos = event.arguments || ''
-        }
-      }
+      // Events the hydration pass already replayed must not be counted twice.
+      if (state.hydratedThrough !== undefined && event.seq <= state.hydratedThrough) return
+      capture(state, session, event)
     } catch (error) {
       log(`session/event error ${error?.message}`)
     }
@@ -198,7 +213,7 @@ function rotate(ctx, config, agent) {
 
   if (dryRun) {
     log(`DRY ${session.id} ratio=${ratio.toFixed(3)} range=${range.startSeq}..${range.endSeq}`)
-    log(`DRY brief ${JSON.stringify(brief.slice(0, 600))}`)
+    log(`DRY brief ${JSON.stringify(brief)}`)
     return
   }
 
@@ -206,6 +221,7 @@ function rotate(ctx, config, agent) {
     'user/message',
     {
       id: `context-rotate-${randomUUID()}`,
+      role: 'user',
       content: [{ type: 'text', text: brief }],
       source: { kind: 'context-rotate' },
     },
