@@ -73,7 +73,7 @@ window.__ModuleLoader__.load({
             { style: { opacity: 0.7, fontSize: 13, margin: '0 0 8px' } },
             '上下文占用越过阈值时，把模型可见的对话面截断并重播种一份交接书。界面上的旧消息仍然保留，模型不再看到它们。',
           ),
-          h('div', { style: FIELD_STYLE }, h('span', null, '启用轮换'), toggle('enabled', false)),
+          h('div', { style: FIELD_STYLE }, h('span', null, '启用自动轮换（/rotate 不受影响）'), toggle('enabled', false)),
           h('div', { style: FIELD_STYLE }, h('span', null, '只预演（写日志、不截断）'), toggle('dryRun', true)),
           h('div', { style: FIELD_STYLE }, h('span', null, '主 agent 阈值（窗口百分比）'), number('mainPercent', 60, 10, 99)),
           h('div', { style: FIELD_STYLE }, h('span', null, '子 agent 阈值（窗口百分比）'), number('subPercent', 50, 10, 99)),

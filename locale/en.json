@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Context Rotation",
-    "description": "Truncate the model-visible conversation surface and re-seed it from a deterministic handoff brief once context occupancy crosses a threshold; main agents are asked first, sub-agents rotate directly."
+    "description": "Truncate the model-visible conversation surface and re-seed it from a deterministic handoff brief once context occupancy crosses a threshold, or immediately with the /rotate command."
   }
 }
